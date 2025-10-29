@@ -19,31 +19,55 @@ load_dotenv()
 st.set_page_config(page_title="🧠 Multi-Model ReAct Agent", page_icon="🤖")
 st.title("🤖 Multi-Model ReAct Agent (Groq + OpenAI + Hugging Face + Gemini)")
 
+# --------------------------
+# Sidebar: Model provider, key, and model selection
+# --------------------------
 st.sidebar.header("⚙️ Settings")
 
-# Model provider selection
+# Select model provider
 provider = st.sidebar.selectbox(
     "Select Model Provider",
-    ["Groq", "OpenAI", "Hugging Face", "Gemini"],
+    ["--Select--", "Groq", "OpenAI", "Hugging Face", "Gemini"],
     index=0
 )
 
-# API key inputs
-groq_key = st.sidebar.text_input("Groq API Key", type="password") or os.getenv("GROQ_API_KEY", "")
-openai_key = st.sidebar.text_input("OpenAI API Key", type="password") or os.getenv("OPENAI_API_KEY", "")
-hf_key = st.sidebar.text_input("Hugging Face API Key", type="password") or os.getenv("HUGGINGFACE_API_KEY", "")
-gemini_key = st.sidebar.text_input("Gemini API Key", type="password") or os.getenv("GEMINI_API_KEY", "")
+# Initialize variables
+groq_key = openai_key = hf_key = gemini_key = model_name = ""
 
-# Model selection based on provider
+# Show API key + model based on provider
 if provider == "Groq":
-    model_name = st.sidebar.selectbox("Model", ["llama-3.1-8b-instant", "mixtral-8x7b", "gemma-7b", "llama3-groq-70b"], index=0)
-elif provider == "OpenAI":
-    model_name = st.sidebar.selectbox("Model", ["gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"], index=0)
-elif provider == "Hugging Face":
-    model_name = st.sidebar.text_input("Hugging Face Model", "mistralai/Mistral-7B-Instruct")
-elif provider == "Gemini":
-    model_name = st.sidebar.selectbox("Model", ["gemini-1.5-flash", "gemini-1.5-pro"], index=0)
+    groq_key = st.sidebar.text_input("🔑 Enter Groq API Key", type="password") or os.getenv("GROQ_API_KEY", "")
+    model_name = st.sidebar.selectbox(
+        "Select Groq Model",
+        ["llama-3.1-8b-instant", "mixtral-8x7b"],
+        index=0
+    )
 
+elif provider == "OpenAI":
+    openai_key = st.sidebar.text_input("🔑 Enter OpenAI API Key", type="password") or os.getenv("OPENAI_API_KEY", "")
+    model_name = st.sidebar.selectbox(
+        "Select OpenAI Model",
+        ["gpt-4o-mini", "gpt-4o"],
+        index=0
+    )
+
+elif provider == "Hugging Face":
+    hf_key = st.sidebar.text_input("🔑 Enter Hugging Face API Key", type="password") or os.getenv("HUGGINGFACE_API_KEY", "")
+    model_name = st.sidebar.selectbox(
+        "Select Hugging Face Model",
+        ["google/flan-t5-base", "tiiuae/falcon-7b-instruct", "mistralai/Mistral-7B-Instruct-v0.2"],
+        index=0
+    )
+
+elif provider == "Gemini":
+    gemini_key = st.sidebar.text_input("🔑 Enter Gemini API Key", type="password") or os.getenv("GEMINI_API_KEY", "")
+    model_name = st.sidebar.selectbox(
+        "Select Gemini Model",
+        ["gemini-pro", "models/gemini-1.5-flash", "models/gemini-1.5-pro"],
+        index=0
+    )
+
+# Reasoning steps
 max_steps = st.sidebar.slider("Max reasoning steps", 1, 6, 3)
 
 st.markdown("""
@@ -123,44 +147,49 @@ INPUT_RE = re.compile(r"^Action Input:\s*(.*)", re.I)
 # --------------------------
 def generate_response(prompt):
     """Route prompt to the right LLM provider."""
-    if provider == "Groq":
-        client = Groq(api_key=groq_key)
-        resp = client.chat.completions.create(
-            model=model_name,
-            messages=[{"role": "system", "content": SYSTEM_PROMPT},
-                      {"role": "user", "content": prompt}],
-            temperature=0.2,
-            max_tokens=800,
-        )
-        return resp.choices[0].message.content
+    try:
+        if provider == "Groq":
+            client = Groq(api_key=groq_key)
+            resp = client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "system", "content": SYSTEM_PROMPT},
+                          {"role": "user", "content": prompt}],
+                temperature=0.2,
+                max_tokens=800,
+            )
+            return resp.choices[0].message.content
 
-    elif provider == "OpenAI":
-        client = OpenAI(api_key=openai_key)
-        resp = client.chat.completions.create(
-            model=model_name,
-            messages=[{"role": "system", "content": SYSTEM_PROMPT},
-                      {"role": "user", "content": prompt}],
-            temperature=0.2,
-            max_tokens=800,
-        )
-        return resp.choices[0].message.content
+        elif provider == "OpenAI":
+            client = OpenAI(api_key=openai_key)
+            resp = client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "system", "content": SYSTEM_PROMPT},
+                          {"role": "user", "content": prompt}],
+                temperature=0.2,
+                max_tokens=800,
+            )
+            return resp.choices[0].message.content
 
-    elif provider == "Hugging Face":
-        headers = {"Authorization": f"Bearer {hf_key}"}
-        payload = {"inputs": prompt, "parameters": {"max_new_tokens": 400}}
-        response = requests.post(f"https://api-inference.huggingface.co/models/{model_name}",
-                                 headers=headers, json=payload)
-        data = response.json()
-        return data[0]["generated_text"] if isinstance(data, list) else str(data)
+        elif provider == "Hugging Face":
+            headers = {"Authorization": f"Bearer {hf_key}"}
+            payload = {"inputs": prompt, "parameters": {"max_new_tokens": 400}}
+            response = requests.post(
+                f"https://api-inference.huggingface.co/models/{model_name}",
+                headers=headers, json=payload
+            )
+            data = response.json()
+            return data[0]["generated_text"] if isinstance(data, list) else str(data)
 
-    elif provider == "Gemini":
-        genai.configure(api_key=gemini_key)
-        model = genai.GenerativeModel(model_name)
-        response = model.generate_content(prompt)
-        return response.text
+        elif provider == "Gemini":
+            genai.configure(api_key=gemini_key)
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
+            return response.text
 
-    else:
-        return "❌ No valid model provider selected."
+        else:
+            return "❌ No valid model provider selected."
+    except Exception as e:
+        return f"⚠️ Error generating response: {e}"
 
 # --------------------------
 # 5. Mini ReAct Agent

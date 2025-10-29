@@ -8,3 +8,4 @@ youtube-search-python>=1.6.6
 requests>=2.31.0
 openai>=1.47.0
 google-generativeai>=0.7.2
+ddgs
